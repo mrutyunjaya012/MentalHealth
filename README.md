@@ -96,8 +96,8 @@ npm run dev:client   # http://localhost:5173
 | `npm run dev` | Start client and server |
 | `npm run dev:client` | Vite frontend only |
 | `npm run dev:server` | Express API only |
-| `npm run build` | Build client for production |
-| `npm run start` | Start production server |
+| `npm run build` | Install deps + build client (Render-ready) |
+| `npm run start` | Start production Express (serves API + SPA) |
 | `npm run seed` | Seed MongoDB with sample data |
 | `npm run lint` | Lint the client |
 
@@ -109,9 +109,55 @@ npm run dev:client   # http://localhost:5173
 | * | `/api/users` | User auth & management |
 | * | `/api/predictions` | Prediction CRUD |
 
-## Production
+## Deploy on Render (single service)
 
-1. Build the client: `npm run build`
-2. Serve `client/dist` via your host, or configure Express static serving
-3. Set `VITE_API_URL` to your deployed API URL before building
-4. Set `NODE_ENV=production` and `CLIENT_URL` on the server
+Express serves the API and the built React app from one URL. Axios uses `/api` (same origin).
+
+### 1. Push to GitHub
+
+Commit and push this repo to GitHub.
+
+### 2. Allow Atlas access from Render
+
+In [MongoDB Atlas](https://cloud.mongodb.com/) → **Network Access** → add IP `0.0.0.0/0` (allow access from anywhere). Render uses dynamic IPs.
+
+### 3. Create the Web Service
+
+**Option A — Blueprint**
+
+1. Go to [Render Dashboard](https://dashboard.render.com/) → **New** → **Blueprint**
+2. Connect this repo (uses [`render.yaml`](render.yaml))
+3. Set secret env vars when prompted:
+   - `MONGODB_URI` — your Atlas connection string
+   - `CLIENT_URL` — your service URL after it exists (e.g. `https://neuropredict.onrender.com`); you can update this after the first deploy
+
+**Option B — Manual Web Service**
+
+1. **New** → **Web Service** → connect the repo
+2. Settings:
+   - **Build Command:** `npm run build`
+   - **Start Command:** `npm start`
+3. Environment variables:
+
+| Key | Value |
+|-----|--------|
+| `NODE_ENV` | `production` |
+| `MONGODB_URI` | Atlas connection string |
+| `CLIENT_URL` | `https://<your-service>.onrender.com` |
+
+Do **not** commit `server/.env`. Secrets live only in Render.
+
+### 4. Seed data (optional)
+
+After the first successful deploy, open **Shell** on the service and run:
+
+```bash
+npm run seed --prefix server
+```
+
+Default accounts: `admin@gmail.com` / `admin123`, `user@gmail.com` / `user123`.
+
+### Notes
+
+- Free Render services sleep when idle; the first request after sleep can take 30–60 seconds.
+- Local development is unchanged: `npm run dev` (Vite + API on separate ports).

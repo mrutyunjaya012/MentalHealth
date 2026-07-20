@@ -1,10 +1,16 @@
 import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import { connectDB } from "./config/db.js";
 import userRoutes from "./routes/userRoutes.js";
 import predictionRoutes from "./routes/predictionRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.join(__dirname, "../../client/dist");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -52,7 +58,15 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/predictions", predictionRoutes);
 
-app.use(notFound);
+if (!isDev) {
+  app.use(express.static(clientDistPath));
+
+  app.get(/^(?!\/api).*/, (_req, res) => {
+    res.sendFile(path.join(clientDistPath, "index.html"));
+  });
+}
+
+app.use("/api", notFound);
 app.use(errorHandler);
 
 async function startServer() {
