@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
@@ -10,7 +11,15 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const clientDistPath = path.join(__dirname, "../../client/dist");
+
+// Prefer server/public (copied at build time); fall back to client/dist for local prod tests
+const candidateStaticPaths = [
+  path.resolve(__dirname, "../public"),
+  path.resolve(__dirname, "../../client/dist"),
+];
+const clientDistPath = candidateStaticPaths.find((p) =>
+  fs.existsSync(path.join(p, "index.html"))
+);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -52,6 +61,7 @@ app.get("/api/health", (_req, res) => {
     success: true,
     message: "API is running",
     timestamp: new Date().toISOString(),
+    staticPath: clientDistPath || null,
   });
 });
 
@@ -59,11 +69,27 @@ app.use("/api/users", userRoutes);
 app.use("/api/predictions", predictionRoutes);
 
 if (!isDev) {
-  app.use(express.static(clientDistPath));
+  if (!clientDistPath) {
+    console.error(
+      "Static frontend not found. Looked in:",
+      candidateStaticPaths.join(", ")
+    );
+  } else {
+    console.log(`Serving frontend from: ${clientDistPath}`);
+    app.use(express.static(clientDistPath, { index: false }));
 
-  app.get(/^(?!\/api).*/, (_req, res) => {
-    res.sendFile(path.join(clientDistPath, "index.html"));
-  });
+    app.get(/^(?!\/api).*/, (req, res, next) => {
+      // Let missing asset requests 404 instead of returning index.html
+      if (path.extname(req.path)) {
+        res.status(404).end();
+        return;
+      }
+
+      res.sendFile(path.join(clientDistPath, "index.html"), (err) => {
+        if (err) next(err);
+      });
+    });
+  }
 }
 
 app.use("/api", notFound);
